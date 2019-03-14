@@ -20,23 +20,6 @@ if platform.system() == 'Linux':
 
 perlfile = os.path.join(toolsDir, 'predict_pitch.pl')
 
-def RmSilenceParallel(AlignmentDir, SpeDir, spedim, ratio, phoneme = 'sil', threads = 5):
-    SpeDir_dropSil = SpeDir+'_dropSil'
-    SaveMkdir(SpeDir_dropSil)   
-
-    print 'Removing silence: %s'%SpeDir
-    argList = []
-    for file in os.listdir(SpeDir):
-        name = file.split('.')[0]   
-        spefile = SpeDir+os.sep+name+'.dat'
-        labelfile = AlignmentDir+os.sep+name+'.lab'
-        spe_dropSil_file = SpeDir_dropSil+os.sep+name+'.dat'        
-        argList.append([labelfile,spefile, spedim, spe_dropSil_file,ratio,phoneme])       
-    pool = Pool(threads)
-    pool.map(RmSilenceSingleFile,argList)
-    pool.close()
-    pool.join()
-
 def RmSilenceSingleFile(args):
     [labelfile,spefile, spedim, spe_dropSil_file,ratio,phoneme] = args
     
