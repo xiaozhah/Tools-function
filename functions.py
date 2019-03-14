@@ -9,14 +9,12 @@ toolsDir = os.path.dirname(os.path.abspath(__file__))
 mlpg_tool = os.path.join(toolsDir, 'bin','mlpg_mv.exe')
 straight  = os.path.join(toolsDir, 'bin','straight_mceplsf.exe')
 
-if platform.system() == 'Windows':
-    winfile = r'\\172.16.46.80\xzhou2\Yanping13k_IFLYFE\win\mcep_d1.win'
-    accwinfile =r'\\172.16.46.80\xzhou2\Yanping13k_IFLYFE\win\mcep_d2.win'
+winfile = os.path.join(toolsDir, '../win/mcep_d1.win')
+accwinfile =os.path.join(toolsDir, '../win/mcep_d2.win')
+
 if platform.system() == 'Linux':
     mlpg_tool = 'wine ' + mlpg_tool
     straight  = 'wine ' + straight
-    winfile = os.path.join(toolsDir, '../win/mcep_d1.win')
-    accwinfile =os.path.join(toolsDir, '../win/mcep_d2.win')
 
 perlfile = os.path.join(toolsDir, 'predict_pitch.pl')       
 
