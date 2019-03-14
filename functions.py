@@ -18,34 +18,7 @@ if platform.system() == 'Linux':
     winfile = os.path.join(toolsDir, '../win/mcep_d1.win')
     accwinfile =os.path.join(toolsDir, '../win/mcep_d2.win')
 
-perlfile = os.path.join(toolsDir, 'predict_pitch.pl')
-
-def RmSilenceSingleFile(args):
-    [labelfile,spefile, spedim, spe_dropSil_file,ratio,phoneme] = args
-    
-    silPos = []
-    lines = open(labelfile,'rt').readlines() 
-    for i in range(len(lines)):
-        if lines[i]=='':continue
-        if lines[i].split()[2].endswith('[2]'):
-            string=lines[i].split()[2]
-            phone_name=string[string.find('-')+1:string.find('+')]
-            if(phone_name==phoneme):
-                phone_start = int(round(float(lines[i].split()[0])/50000.0))
-                phone_end = int(round(float(lines[i+4].split()[1])/50000.0))
-                silPos.append([phone_start,phone_end])
-
-    temp1 = range(silPos[0][0],int(silPos[0][0]+ratio*(silPos[0][1]-silPos[0][0])))
-    temp2 = range(int(silPos[1][0]+(1-ratio)*(silPos[1][1]-silPos[1][0])),silPos[1][1])
-    rmSilPos = temp1+temp2       
-
-    ######## removing silence from two files    
-    speData = ReadFloatRawMat(spefile,spedim)
-    if rmSilPos==[]:
-        newSpeData = speData
-    else:
-        newSpeData = np.delete(speData,rmSilPos,0)
-    WriteArrayFloat(spe_dropSil_file,newSpeData)        
+perlfile = os.path.join(toolsDir, 'predict_pitch.pl')       
 
 #计算矩阵(M * N)的一二阶差分，构建更多特征的矩阵(M * 3N)
 def calDynamicData(data):
