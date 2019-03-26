@@ -401,66 +401,6 @@ def fulllab2ling(lab, ques_lists):
                 break
     return linguistic_vec
 
-def cutedlabFile_2_DNNInputFile(cutedlab_file,out_file):
-    with open(out_file,'wb') as fout:
-        lines = open(cutedlab_file,'rt').readlines()
-        k = 0
-        for i in range(len(lines)):
-            if lines[i]=='':continue
-            if lines[i].split()[2].endswith('[2]'):
-                phone_start = int(round(float(lines[i].split()[0])/50000.0))
-                phone_end = int(round(float(lines[i+4].split()[1])/50000.0))
-            state_start = int(round(float(lines[i].split()[0])/50000.0))
-            state_end   = int(round(float(lines[i].split()[1])/50000.0))
-            
-            for frame in range(state_start,state_end):
-                fout.write(struct.pack('<1f',*[k]))
-                ####feas[:5]是该帧所在的状态编号###############
-                feas=np.zeros(12) 
-                if lines[i].split()[2].endswith('[2]'):
-                    lis=[1,0,0,0,0]
-                    feas[:5]=lis
-                if lines[i].split()[2].endswith('[3]'):
-                    lis=[0,1,0,0,0]
-                    feas[:5]=lis
-                if lines[i].split()[2].endswith('[4]'):
-                    lis=[0,0,1,0,0]
-                    feas[:5]=lis
-                if lines[i].split()[2].endswith('[5]'):
-                    lis=[0,0,0,1,0]
-                    feas[:5]=lis
-                if lines[i].split()[2].endswith('[6]'):
-                    lis=[0,0,0,0,1]
-                    feas[:5]=lis
-                ################################################
-                feas[5]=state_end-state_start #该帧所在状态的时长
-                feas[6]=phone_end-phone_start #该帧所在音素的时长
-                ####feas[7]是该帧在当前状态的前向位置###########
-                try:
-                    feas[7]=(frame-state_start)/float(state_end-1-state_start)
-                except:
-                    feas[7]=0.5
-                feas[8]=1-feas[7] #当前状态的后向位置
-                #################################################
-                ####feas[8]是该帧在当前音素的前向位置############
-                try:
-                    feas[9]=(frame-phone_start)/float(phone_end-1-phone_start)
-                except:
-                    feas[9]=0.5        
-                feas[10]=1-feas[9]#当前音素的后向位置
-                feas[11]=(state_end-state_start)/float(phone_end-phone_start)#该帧所在的状态的时长在当前音素的时长中的比重
-                fout.write(struct.pack('<12f',*feas))        
-                if frame==phone_end-1:
-                    k+=1
-   
-def cutedlab2DNNInput(cutedlabDir,outDir):
-    SaveMkdir(outDir)
-    for item in sorted(os.listdir(cutedlabDir)):
-        print 'process %s' % item
-        cutedlab_file = os.path.join(cutedlabDir,item.split('.')[0]+'.lab')
-        out_file = os.path.join(outDir,item.split('.')[0]+'.dat')
-        cutedlabFile_2_DNNInputFile(cutedlab_file, out_file)
-
 if __name__=='__main__':
     pass
     #durFile_2_cutedlabFile(r"F:\xzhou\Yanping_13k\gen\yanping\sd\00000002.dur",'test.txt')
