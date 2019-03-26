@@ -7,6 +7,8 @@ from tqdm import tqdm
 from scipy.stats.stats import pearsonr
 from glob import glob
 from subprocess import Popen
+from compiler.ast import flatten
+import re
 
 def SaveMkdir(dir):
     try:
@@ -17,6 +19,9 @@ def SaveMkdir(dir):
 
 def delDir(dir):
     shutil.rmtree(dir)
+
+def FileBaseName(file):
+    return os.path.split(file)[1].split('.')[0]
 
 def durDir_2_cutedlabDir(ori_Dir,trg_Dir,ref_file=None):
     SaveMkdir(trg_Dir)
@@ -60,7 +65,7 @@ def SimpleCopyFiles(ori_Dir,trg_Dir,ref_file=None):
             trg_name = os.path.join(trg_Dir,file)
             shutil.copyfile(ori_name,trg_name)
 
-# 针对目录计算均值数据
+# 针对目录计算均值数据(符合numpy的std，有偏估计)
 def cal_MeanStd(datadir, dim, ref_file=None):
     # This method is efficient for large datadir
     # First row is mean vector
@@ -316,10 +321,8 @@ def MCD(reference_list, generation_list,feature_dim):
     number=len(reference_list)
     distortion = 0.0
     total_frame_number = 0
-    print('Evaluating MCD')
-    for i in xrange(number):
-        if(i % 1000)==0:
-            print('%.2f'%(float(i)/number*100)+'%')
+    tqdm.write('\nEvaluating MCD')
+    for i in tqdm(xrange(number)):
         ref_data = ReadFloatRawMat(reference_list[i],feature_dim).astype(np.float32)
         gen_data=ReadFloatRawMat(generation_list[i],feature_dim).astype(np.float32)
         ref_frame_number=min(ref_data.size/feature_dim,gen_data.size/feature_dim)
@@ -338,10 +341,8 @@ def F0_VUV_distortion(reference_list, generation_list):
     total_frame_number = 0
     ref_all_files_data = np.reshape(np.array([]), (-1,1))
     gen_all_files_data = np.reshape(np.array([]), (-1,1))
-    print('Evaluating F0_VUV_distortion')
-    for i in xrange(number):
-        if(i % 1000)==0:
-            print('%.2f'%(float(i)/number*100)+'%')
+    tqdm.write('Evaluating F0 and VUV distortion')
+    for i in tqdm(xrange(number)):
         length1=len(open(reference_list[i],'rt').readlines())
         length2=len(open(generation_list[i],'rt').readlines())
         length=min(length1,length2)
@@ -372,6 +373,93 @@ def F0_VUV_distortion(reference_list, generation_list):
     distortion = np.sqrt(distortion)
     f0_corr = compute_f0_corr(ref_all_files_data, gen_all_files_data)
     return  distortion, f0_corr, vuv_error
+
+def Get_Ques2Regular(ques_file):
+    lines = filter(lambda i:i.strip()!='', open(ques_file,'rt').readlines())
+    ques_lists = []
+    for line in lines:
+        ques_list = []
+        sub_ques = re.findall(r'[{](.*)[}]', line)[0].split(',')
+        for q in sub_ques:
+            q = q.replace('*',r'.*').replace('?',r'.').replace('$',r'\$')\
+                 .replace('+',r'\+').replace('|',r'\|').replace('^',r'\^')
+            q = re.sub(r'^([a-z])',r'^\1', q)
+            # Compile pattern is Very important. Make 10X faster than originals!
+            # Original(1) ques_list.append(q)
+            ques_list.append(re.compile(q))
+        ques_lists.append(ques_list)
+    return ques_lists
+
+def fulllab2ling(lab, ques_lists):
+    lab = lab.rstrip()
+    linguistic_vec = np.zeros(len(ques_lists), dtype=np.float32)
+    for i, sub_ques in enumerate(ques_lists):
+        for sub_que in sub_ques:
+            # Original(2) re.match(sub_que, q)
+            if(sub_que.match(lab)):
+                linguistic_vec[i] = 1
+                break
+    return linguistic_vec
+
+def cutedlabFile_2_DNNInputFile(cutedlab_file,out_file):
+    with open(out_file,'wb') as fout:
+        lines = open(cutedlab_file,'rt').readlines()
+        k = 0
+        for i in range(len(lines)):
+            if lines[i]=='':continue
+            if lines[i].split()[2].endswith('[2]'):
+                phone_start = int(round(float(lines[i].split()[0])/50000.0))
+                phone_end = int(round(float(lines[i+4].split()[1])/50000.0))
+            state_start = int(round(float(lines[i].split()[0])/50000.0))
+            state_end   = int(round(float(lines[i].split()[1])/50000.0))
+            
+            for frame in range(state_start,state_end):
+                fout.write(struct.pack('<1f',*[k]))
+                ####feas[:5]是该帧所在的状态编号###############
+                feas=np.zeros(12) 
+                if lines[i].split()[2].endswith('[2]'):
+                    lis=[1,0,0,0,0]
+                    feas[:5]=lis
+                if lines[i].split()[2].endswith('[3]'):
+                    lis=[0,1,0,0,0]
+                    feas[:5]=lis
+                if lines[i].split()[2].endswith('[4]'):
+                    lis=[0,0,1,0,0]
+                    feas[:5]=lis
+                if lines[i].split()[2].endswith('[5]'):
+                    lis=[0,0,0,1,0]
+                    feas[:5]=lis
+                if lines[i].split()[2].endswith('[6]'):
+                    lis=[0,0,0,0,1]
+                    feas[:5]=lis
+                ################################################
+                feas[5]=state_end-state_start #该帧所在状态的时长
+                feas[6]=phone_end-phone_start #该帧所在音素的时长
+                ####feas[7]是该帧在当前状态的前向位置###########
+                try:
+                    feas[7]=(frame-state_start)/float(state_end-1-state_start)
+                except:
+                    feas[7]=0.5
+                feas[8]=1-feas[7] #当前状态的后向位置
+                #################################################
+                ####feas[8]是该帧在当前音素的前向位置############
+                try:
+                    feas[9]=(frame-phone_start)/float(phone_end-1-phone_start)
+                except:
+                    feas[9]=0.5        
+                feas[10]=1-feas[9]#当前音素的后向位置
+                feas[11]=(state_end-state_start)/float(phone_end-phone_start)#该帧所在的状态的时长在当前音素的时长中的比重
+                fout.write(struct.pack('<12f',*feas))        
+                if frame==phone_end-1:
+                    k+=1
+   
+def cutedlab2DNNInput(cutedlabDir,outDir):
+    SaveMkdir(outDir)
+    for item in sorted(os.listdir(cutedlabDir)):
+        print 'process %s' % item
+        cutedlab_file = os.path.join(cutedlabDir,item.split('.')[0]+'.lab')
+        out_file = os.path.join(outDir,item.split('.')[0]+'.dat')
+        cutedlabFile_2_DNNInputFile(cutedlab_file, out_file)
 
 if __name__=='__main__':
     pass
